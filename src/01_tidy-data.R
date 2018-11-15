@@ -19,13 +19,16 @@ print(mbo_id)
 
 # 02_measures -----------------------------------------
 
+mbo_id_split <- concat_encounters(pts$millennium.id, 40)
+print(mbo_id_split)
+
 measures <- read_data(dir_raw, "measures", FALSE) %>%
-    as.events() %>%
+    as.events(order_var = FALSE) %>%
     mutate_at("event.result", as.numeric)
 
 weights <- measures %>%
     filter(
-        event == "Weight",
+        event == "weight",
         event.result.units == "kg"
     ) %>%
     arrange(millennium.id, event.datetime) %>%
@@ -34,7 +37,7 @@ weights <- measures %>%
 
 heights <- measures %>%
     filter(
-        event == "Height",
+        event == "height",
         event.result.units == "cm"
     ) %>%
     arrange(millennium.id, event.datetime) %>%
@@ -42,7 +45,7 @@ heights <- measures %>%
     select(millennium.id, height = event.result)
 
 bmi <- measures %>%
-    filter(event == "Body Mass Index") %>%
+    filter(event == "body mass index") %>%
     arrange(millennium.id, event.datetime) %>%
     distinct(millennium.id, .keep_all = TRUE) %>%
     select(millennium.id, bmi = event.result)
