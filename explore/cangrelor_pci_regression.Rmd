@@ -98,7 +98,8 @@ df <- read_excel(
             prasugrel ~ "prasugrel",
             ticagrelor ~ "ticagrelor",
             TRUE ~ NA_character_
-        )
+        ),
+        transfused = transfusions > 0
     ) %>%
     mutate_at(c("gp2b3ai", "lmwh", "aspirin", "tpa"), list(~coalesce(., FALSE))) %>%
     mutate_at("mcs_device", na_if, y = 0) %>%
@@ -116,7 +117,7 @@ df_bmi <- filter(df, !is.na(bmi))
 
 ```
 
-```{r}
+```{r, eval=FALSE}
 summary(df)
 ```
 
@@ -124,9 +125,11 @@ summary(df)
 library(MASS)
 ```
 
+Click on the Code button above each model to see which variables were included. The outcome is on the left of the ~, the input variables are on the right.
+
 # Composite Outcome
 
-## Univariate Regression Models
+### Univariate Regression Models
 
 ```{r}
 glm(
@@ -148,11 +151,9 @@ glm(
     knitr::kable(digits = 3)
 ```
 
-## Multivariate Regression Models
-
 ```{r}
 glm(
-    composite ~ cangrelor + mcs + pressors, 
+    composite ~ pressors, 
     family = "binomial", 
     data = df
 ) %>%
@@ -160,11 +161,23 @@ glm(
     knitr::kable(digits = 3)
 ```
 
-## Stepwise Regression Models
+### Multivariate Regression Models
 
 ```{r}
 glm(
-    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfusions, 
+    composite ~ cangrelor + mcs, 
+    family = "binomial", 
+    data = df
+) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+### Stepwise Regression Models
+
+```{r}
+glm(
+    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfused, 
     family = "binomial", 
     data = df
 ) %>%
@@ -173,11 +186,26 @@ glm(
     knitr::kable(digits = 3)
 ```
 
+#### Model with type of MCS device
+
 ```{r}
 glm(
-    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfusions, 
+    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs_device + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfused, 
     family = "binomial", 
     data = df
+) %>%
+    stepAIC(direction = "backward", trace = FALSE) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+#### Stepwise model with MCS removed
+
+```{r}
+glm(
+    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfused, 
+    family = "binomial", 
+    data = df_bmi
 ) %>%
     stepAIC(direction = "backward", trace = FALSE) %>%
     tidy(conf.int = TRUE, exponentiate = TRUE) %>%
@@ -186,7 +214,7 @@ glm(
 
 # Bleeding
 
-## Univariate Regression Models
+### Univariate Regression Models
 
 ```{r}
 glm(
@@ -228,28 +256,28 @@ glm(
     knitr::kable(digits = 3)
 ```
 
-## Multivariate Regression Models
-
-
-## Stepwise Regression Models
+### Stepwise Regression Models
 
 ```{r}
 glm(
-    bleed ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs + pci_indication + femoral + antiplt_agent + gp2b3ai + transfusions, 
+    bleed ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs + pci_indication + femoral + oral_antiplt + gp2b3ai, 
     family = "binomial", 
-    data = df
+    data = df_bmi
 ) %>%
     stepAIC(direction = "backward", trace = FALSE) %>%
     tidy(conf.int = TRUE, exponentiate = TRUE) %>%
     knitr::kable(digits = 3)
 ```
 
+# Model in patients Without MCS only
 
 ```{r}
 df_nomcs <- filter(df, !mcs)
+```
 
+```{r}
 glm(
-    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfusions, 
+    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + pci_indication + pci_duration + femoral + gp2b3ai + oral_antiplt, 
     family = "binomial", 
     data = df_nomcs
 ) %>%
