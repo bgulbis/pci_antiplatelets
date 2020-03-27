@@ -8,14 +8,13 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
 ```{r}
 library(tidyverse)
 library(readxl)
 library(broom)
-library(MASS)
 
 df <- read_excel(
     "../data/external/cangrelor_pci_data.xlsx",
@@ -41,7 +40,7 @@ df <- read_excel(
         "pmh_acs",
         "pmh_renal",
         "pressors",
-        "mcs",
+        "mcs_device",
         "pci_indication",
         "pci_duration",
         "femoral",
@@ -93,12 +92,27 @@ df <- read_excel(
             race_asian ~ "asian",
             race_hispanic ~ "hispanic",
             race_other ~ "other"
+        ),
+        antiplt_agent = case_when(
+            clopidogrel ~ "clopidogrel",
+            prasugrel ~ "prasugrel",
+            ticagrelor ~ "ticagrelor",
+            TRUE ~ NA_character_
         )
     ) %>%
     mutate_at(c("gp2b3ai", "lmwh", "aspirin", "tpa"), list(~coalesce(., FALSE))) %>%
-    mutate_at("mcs", na_if, y = 0) %>%
-    mutate_at("mcs", list(~coalesce(., "None"))) %>%
-    mutate_at(c("mcs", "pci_indication"), str_to_upper)
+    mutate_at("mcs_device", na_if, y = 0) %>%
+    mutate(
+        mcs = !is.na(mcs_device),
+        oral_antiplt = !is.na(antiplt_agent)
+    ) %>%
+    mutate_at(c("mcs_device", "antiplt_agent"), list(~coalesce(., "none"))) %>%
+    mutate_at(c("mcs_device", "pci_indication"), str_to_upper) %>%
+    mutate_at(c("antiplt_agent", "race"), str_to_title) %>%
+    mutate_at(c("mcs_device", "pci_indication", "antiplt_agent", "race"), fct_infreq) %>%
+    mutate_at("antiplt_agent", list(~fct_relevel(., "None", after = 0)))
+
+df_bmi <- filter(df, !is.na(bmi))
 
 ```
 
@@ -106,14 +120,62 @@ df <- read_excel(
 summary(df)
 ```
 
+```{r}
+library(MASS)
+```
 
-# Stepwise Regression Models
+# Composite Outcome
 
-## Composite Outcome
+## Univariate Regression Models
 
 ```{r}
 glm(
-    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs + pci_indication + femoral, 
+    composite ~ cangrelor, 
+    family = "binomial", 
+    data = df
+) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+```{r}
+glm(
+    composite ~ mcs, 
+    family = "binomial", 
+    data = df
+) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+## Multivariate Regression Models
+
+```{r}
+glm(
+    composite ~ cangrelor + mcs + pressors, 
+    family = "binomial", 
+    data = df
+) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+## Stepwise Regression Models
+
+```{r}
+glm(
+    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfusions, 
+    family = "binomial", 
+    data = df
+) %>%
+    stepAIC(direction = "backward", trace = FALSE) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+```{r}
+glm(
+    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfusions, 
     family = "binomial", 
     data = df
 ) %>%
@@ -124,9 +186,56 @@ glm(
 
 # Bleeding
 
+## Univariate Regression Models
+
 ```{r}
 glm(
-    bleed ~ cangrelor + male + race + age + pmh_hepatic + pmh_renal + pressors + mcs + pci_indication + femoral + clopidogrel + ticagrelor + prasugrel, 
+    bleed ~ cangrelor, 
+    family = "binomial", 
+    data = df
+) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+```{r}
+glm(
+    bleed ~ gp2b3ai, 
+    family = "binomial", 
+    data = df
+) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+```{r}
+glm(
+    bleed ~ oral_antiplt, 
+    family = "binomial", 
+    data = df
+) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+```{r}
+glm(
+    bleed ~ antiplt_agent, 
+    family = "binomial", 
+    data = df
+) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+## Multivariate Regression Models
+
+
+## Stepwise Regression Models
+
+```{r}
+glm(
+    bleed ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs + pci_indication + femoral + antiplt_agent + gp2b3ai + transfusions, 
     family = "binomial", 
     data = df
 ) %>%
@@ -136,3 +245,15 @@ glm(
 ```
 
 
+```{r}
+df_nomcs <- filter(df, !mcs)
+
+glm(
+    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + pci_indication + pci_duration + femoral + gp2b3ai + antiplt_agent + transfusions, 
+    family = "binomial", 
+    data = df_nomcs
+) %>%
+    stepAIC(direction = "backward", trace = FALSE) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
