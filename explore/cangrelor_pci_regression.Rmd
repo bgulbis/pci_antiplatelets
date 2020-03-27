@@ -1,0 +1,138 @@
+---
+title: "Cangrelor Regression Analysis"
+author: "Brian Gulbis, PharmD, BCPS"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output: 
+    html_document:
+        code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(broom)
+library(MASS)
+
+df <- read_excel(
+    "../data/external/cangrelor_pci_data.xlsx",
+    skip = 1,
+    # range = "A2:C78",
+    col_names = c(
+        "fin",
+        "cangrelor",
+        "male",
+        "race_white",
+        "race_black",
+        "race_asian",
+        "race_hispanic",
+        "race_other",
+        "age",
+        "height",
+        "weight",
+        "bmi",
+        "pmh_stroke",
+        "pmh_chf",
+        "pmh_dm",
+        "pmh_hepatic",
+        "pmh_acs",
+        "pmh_renal",
+        "pressors",
+        "mcs",
+        "pci_indication",
+        "pci_duration",
+        "femoral",
+        "fondaparinux",
+        "lmwh",
+        "heparin",
+        "aspirin",
+        "bivalirudin",
+        "dti",
+        "gp2b3ai",
+        "tpa",
+        "clopidogrel",
+        "prasugrel",
+        "ticagrelor",
+        "composite",
+        "mortality",
+        "stent_thromb",
+        "stroke",
+        "mi",
+        "revasc",
+        "bleed",
+        "timi_min",
+        "timi_medattent",
+        "timi_minor",
+        "timi_major",
+        "timi_min_maj",
+        "barc1",
+        "barc2",
+        "barc3",
+        "barc5",
+        "barc3_5",
+        "transfusions"
+    ),
+    col_types = c(
+        "text",
+        rep("logical", 7),
+        rep("numeric", 4),
+        rep("logical", 7),
+        rep("text", 2),
+        "numeric",
+        rep("logical", 29),
+        "numeric"
+    )
+) %>%
+    mutate(
+        race = case_when(
+            race_white ~ "white",
+            race_black ~ "african_american",
+            race_asian ~ "asian",
+            race_hispanic ~ "hispanic",
+            race_other ~ "other"
+        )
+    ) %>%
+    mutate_at(c("gp2b3ai", "lmwh", "aspirin", "tpa"), list(~coalesce(., FALSE))) %>%
+    mutate_at("mcs", na_if, y = 0) %>%
+    mutate_at("mcs", list(~coalesce(., "None"))) %>%
+    mutate_at(c("mcs", "pci_indication"), str_to_upper)
+
+```
+
+```{r}
+summary(df)
+```
+
+
+# Stepwise Regression Models
+
+## Composite Outcome
+
+```{r}
+glm(
+    composite ~ cangrelor + male + race + age + bmi + pmh_stroke + pmh_chf + pmh_dm + pmh_hepatic + pmh_acs + pmh_renal + pressors + mcs + pci_indication + femoral, 
+    family = "binomial", 
+    data = df
+) %>%
+    stepAIC(direction = "backward", trace = FALSE) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+# Bleeding
+
+```{r}
+glm(
+    bleed ~ cangrelor + male + race + age + pmh_hepatic + pmh_renal + pressors + mcs + pci_indication + femoral + clopidogrel + ticagrelor + prasugrel, 
+    family = "binomial", 
+    data = df
+) %>%
+    stepAIC(direction = "backward", trace = FALSE) %>%
+    tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+    knitr::kable(digits = 3)
+```
+
+
